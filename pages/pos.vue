@@ -37,31 +37,33 @@ const maxUsablePoints = computed(() => {
 
   if (!pointValue) return 0
 
-  // 💰 จำกัดเป็น "บาท"
   const maxDiscount = (total.value * percent) / 100
-
-  // 🎯 แปลงเป็น "แต้ม"
-  const maxPointsByPercent = Math.floor(maxDiscount / pointValue)
+  const maxPoints = Math.floor(maxDiscount / pointValue)
 
   return Math.min(
     customerTotalPoints.value || 0,
-    maxPointsByPercent
+    maxPoints
   )
 })
 
 watch(usePoints, (val) => {
   if (!customerName.value) {
     usePoints.value = 0
+    discount.value = 0
     return
   }
 
-  if (val < 0) usePoints.value = 0
+  const safeVal = Number(val || 0)
+  const pointValue = Number(config.value.point_value || 1)
 
-  if (val > maxUsablePoints.value) {
-    usePoints.value = maxUsablePoints.value
+  if (safeVal < 0) {
+    usePoints.value = 0
+    return
   }
 
-  const pointValue = Number(config.value.point_value || 1)
+  if (safeVal > maxUsablePoints.value) {
+    usePoints.value = maxUsablePoints.value
+  }
 
   discount.value = usePoints.value * pointValue
 })
@@ -95,7 +97,7 @@ const loadOffline = () => {
 const config = ref({})
 
 onMounted(async () => {
-  config.value = await $fetch('/api/settings')
+  config.value = await $fetch('/api/admin/settings')
 })
 
 /* ================= COMPUTED ================= */
@@ -303,6 +305,8 @@ const resetPOS = () => {
   showReceiptModal.value = false // ปิด Modal ด้วย
   status.value = 'idle'
   orderPoints.value = 0
+  usePoints.value = 0
+  discount.value = 0
   
   nextTick(() => {
     searchRef.value?.focus()
