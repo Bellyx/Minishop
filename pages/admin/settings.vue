@@ -64,6 +64,7 @@ onMounted(load)
         placeholder="คั่นด้วย , เช่น กาแฟ,ชา,ของหวาน"></textarea>
     </div>
 
+
     <!-- SAVE -->
     <button @click="save"
       class="bg-blue-600 text-white px-6 py-2 rounded">

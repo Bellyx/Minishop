@@ -78,6 +78,13 @@ const activeCategory = ref('ทั้งหมด')
 /* 🔥 NEW: State สำหรับแสดง Modal ใบเสร็จ Digital */
 const showReceiptModal = ref(false)
 
+/* 🆕 UI State สำหรับ Toast Notification */
+const toast = ref({ show: false, message: '', type: 'info' })
+const showToast = (msg, type = 'info') => {
+  toast.value = { show: true, message: msg, type }
+  setTimeout(() => toast.value.show = false, 3000)
+}
+
 /* ================= LOAD ================= */
 const load = async () => {
   try {
@@ -205,7 +212,7 @@ watch(customerPhone, async (val) => {
 /* ================= CHECKOUT ================= */
 const checkout = async () => {
   if (!cart.value.length) {
-    alert('ไม่มีสินค้าในตะกร้า')
+    showToast('🛒 ไม่มีสินค้าในตะกร้า', 'error')
     return
   }
 
@@ -242,7 +249,7 @@ const checkout = async () => {
 
   } catch (err) {
     console.error(err)
-    alert(err.data?.message || 'เกิดข้อผิดพลาดในการสร้างออเดอร์')
+    showToast(err.data?.message || '❌ เกิดข้อผิดพลาดในการสร้างออเดอร์', 'error')
     status.value = 'idle'
   }
 }
@@ -251,7 +258,7 @@ const checkout = async () => {
 const payCash = async () => {
   if (cashReceived.value < finalTotal.value){
     speak('เงินไม่พอ')
-    alert('เงินที่ได้รับไม่พอชำระ')
+    showToast('💸 เงินที่ได้รับไม่พอชำระ', 'error')
     return
   }
 
@@ -270,14 +277,14 @@ const payCash = async () => {
     showReceiptModal.value = true
 
   } catch (e) {
-    alert('บันทึกการชำระเงินล้มเหลว')
+    showToast('❌ บันทึกการชำระเงินล้มเหลว', 'error')
   }
 }
 
 /* ================= TEST (Mock Payment) ================= */
 const mockPaid = async () => {
   if (!orderId.value) {
-    alert('ยังไม่ได้สร้างบิล กดคิดเงินก่อน')
+    showToast('⚠️ ยังไม่ได้สร้างบิล กดคิดเงินก่อน', 'warning')
     return
   }
 
@@ -307,6 +314,8 @@ const resetPOS = () => {
   orderPoints.value = 0
   usePoints.value = 0
   discount.value = 0
+  receiptFinal.value = 0
+  finalTotal.value = 0
   
   nextTick(() => {
     searchRef.value?.focus()
@@ -339,32 +348,63 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-slate-100 font-sans text-slate-800">
+  <div class="flex h-screen bg-slate-50 font-sans text-slate-800 relative overflow-hidden">
+
+    <!-- 🆕 Toast Notification (Replaces Alert) -->
+    <Transition name="toast">
+      <div v-if="toast.show" class="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl border border-white/20 backdrop-blur-md transition-all"
+        :class="{
+          'bg-emerald-600 text-white': toast.type === 'success',
+          'bg-rose-600 text-white': toast.type === 'error',
+          'bg-amber-500 text-white': toast.type === 'warning',
+          'bg-slate-800 text-white': toast.type === 'info'
+        }"
+      >
+        <span v-if="toast.type === 'success'" class="text-xl">✅</span>
+        <span v-if="toast.type === 'error'" class="text-xl">🚫</span>
+        <span v-if="toast.type === 'warning'" class="text-xl">⚠️</span>
+        <span v-if="toast.type === 'info'" class="text-xl">ℹ️</span>
+        <span class="font-semibold text-sm">{{ toast.message }}</span>
+      </div>
+    </Transition>
 
     <!-- LEFT: Product Selection -->
-    <div class="flex-1 flex flex-col overflow-hidden p-4">
+    <div class="flex-1 flex flex-col h-full relative z-10">
       
-      <!-- Search & Categories -->
-      <div class="mb-4 space-y-3">
-        <input
-          ref="searchRef"
-          v-model="keyword"
-          @keyup.enter="handleBarcode"
-          class="w-full p-4 text-xl border-2 border-slate-200 rounded-xl shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition"
-          placeholder="🔍 ค้นหาสินค้า / ยิงบาร์โค้ด (Enter)"
-        />
+      <!-- Top Bar -->
+      <div class="p-6 pb-2">
+        <div class="flex items-center justify-between mb-4">
+          <h1 class="text-2xl font-bold text-slate-700 tracking-tight">🛒 POS System</h1>
+          <div class="text-xs text-slate-400 font-mono">V.1.0</div>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative group">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg class="h-6 w-6 text-slate-400 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            ref="searchRef"
+            v-model="keyword"
+            @keyup.enter="handleBarcode"
+            class="w-full pl-12 pr-4 py-4 text-xl bg-white border-2 border-slate-200 rounded-2xl shadow-sm focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300"
+            placeholder="ค้นหา / สแกนบาร์โค้ด..."
+          />
+        </div>
 
         <!-- Category Tabs -->
-        <div class="flex gap-2 overflow-x-auto pb-1">
+        <div class="flex gap-2 overflow-x-auto pb-2 mt-4 scrollbar-hide">
           <button
             v-for="cat in categories"
             :key="cat"
             @click="activeCategory = cat"
             :class="[
-              'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all shadow-sm',
+              'px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 shadow-sm border',
               activeCategory === cat
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                ? 'bg-slate-800 text-white border-slate-800 scale-105 shadow-lg shadow-slate-800/20'
+                : 'bg-white text-slate-500 border-slate-100 hover:bg-white hover:border-indigo-200 hover:text-indigo-600'
             ]"
           >
             {{ cat }}
@@ -373,330 +413,351 @@ onUnmounted(() => {
       </div>
 
       <!-- Product Grid -->
-      <div class="flex-1 overflow-y-auto pr-2">
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+      <div class="flex-1 overflow-y-auto p-6 pt-2">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
           <button
             v-for="p in filteredProducts"
             :key="p.id"
             @click="add(p)"
-            class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 hover:border-indigo-400 hover:shadow-md active:scale-95 transition-all flex flex-col items-center justify-center aspect-square"
+            class="group bg-white p-4 rounded-2xl border border-slate-100 hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-200 flex flex-col items-start justify-between h-40 relative overflow-hidden"
           >
-            <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl mb-2 text-slate-500">
+            <!-- Product Icon Placeholder -->
+            <div class="absolute -right-4 -top-4 w-24 h-24 bg-slate-50 rounded-full group-hover:bg-indigo-50 transition-colors flex items-center justify-center text-4xl text-slate-300 group-hover:text-indigo-200">
               📦
             </div>
-            <div class="font-semibold text-slate-700 text-center text-sm leading-tight line-clamp-2">
-              {{ p.name }}
+            
+            <div class="relative z-10 w-full pr-4">
+              <h3 class="font-bold text-slate-700 text-left leading-tight line-clamp-2 group-hover:text-indigo-700 transition-colors">
+                {{ p.name }}
+              </h3>
+              <div class="text-xs text-slate-400 mt-1 font-mono">{{ p.barcode || '-' }}</div>
             </div>
-            <div class="text-indigo-600 font-bold mt-1">
-              ฿{{ p.price }}
+
+            <div class="relative z-10 w-full flex justify-between items-end">
+              <div class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-sm font-bold">
+                ฿{{ Number(p.price).toLocaleString() }}
+              </div>
+              <div class="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white text-indigo-400 flex items-center justify-center text-xs transition-colors">
+                +
+              </div>
             </div>
           </button>
         </div>
         
-        <div v-if="filteredProducts.length === 0" class="text-center text-slate-400 mt-10">
-          ไม่พบสินค้า
+        <!-- Empty State -->
+        <div v-if="filteredProducts.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-400 animate-pulse">
+          <div class="text-6xl mb-4 opacity-50">🔎</div>
+          <div class="text-lg font-medium">ไม่พบสินค้าที่ค้นหา</div>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT: Cart & Payment -->
-    <div class="w-full max-w-md bg-white border-l border-slate-200 flex flex-col shadow-xl">
+    <!-- RIGHT: Cart & Payment Panel -->
+    <div class="w-full max-w-md bg-white shadow-2xl z-20 flex flex-col border-l border-slate-100">
 
       <!-- Header & Member -->
-      <div class="p-4 border-b border-slate-100 bg-slate-50">
-        <div class="flex justify-between items-center mb-3">
-          <h2 class="text-lg font-bold text-slate-700">🧾 รายการสั่งซื้อ</h2>
-          <button v-if="cart.length" @click="cart = []" class="text-xs text-red-500 hover:text-red-700 font-medium">
+      <div class="p-5 border-b border-slate-100 bg-slate-50/50 backdrop-blur">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <span class="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg text-sm">🧾</span>
+            รายการสั่งซื้อ
+          </h2>
+          <button v-if="cart.length" @click="cart = []" class="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition">
             ล้างทั้งหมด
           </button>
         </div>
         
-        <div class="space-y-2">
+        <!-- Member Input -->
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <span class="text-lg">📱</span>
+          </div>
           <input 
             v-model="customerPhone" 
-            class="w-full p-2 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-indigo-500 outline-none" 
-            placeholder="📱 เบอร์โทรสมาชิก (กด 10 หลัก)" 
+            type="tel"
+            maxlength="10"
+            class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono tracking-wider placeholder:text-slate-300" 
+            placeholder="เบอร์โทรสมาชิก (10 หลัก)" 
           />
-          
-          <div v-if="customerName" class="p-2 bg-green-50 border border-green-100 rounded-lg text-sm flex justify-between">
-            <span class="text-green-700 font-medium">👤 {{ customerName }}</span>
-            <span class="text-green-600">⭐ {{ customerTotalPoints }} แต้ม</span>
+        </div>
+
+        <!-- Member Info Display -->
+        <Transition name="slide-down">
+          <div v-if="customerName" class="mt-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                👤
+              </div>
+              <div>
+                <div class="text-sm font-bold text-emerald-800">{{ customerName }}</div>
+                <div class="text-xs text-emerald-600">สมาชิก</div>
+              </div>
+            </div>
+            <div class="bg-white px-3 py-1 rounded-lg text-xs font-bold text-emerald-600 shadow-sm">
+              ⭐ {{ customerTotalPoints }} แต้ม
+            </div>
           </div>
-          <div v-if="memberError" class="text-red-500 text-xs">{{ memberError }}</div>
+        </Transition>
+        
+        <div v-if="memberError" class="mt-2 text-xs text-rose-500 font-medium bg-rose-50 p-2 rounded-lg border border-rose-100 flex items-center gap-1">
+          <span>⚠️</span> {{ memberError }}
         </div>
       </div>
 
-      <!-- Cart Items -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-2">
-        <div v-if="!cart.length" class="text-center text-slate-400 pt-10">
-          <div class="text-4xl mb-2">🛒</div>
-          ยังไม่มีสินค้า
-        </div>
-
-        <div 
-          v-for="c in cart" 
-          :key="c.id" 
-          class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100"
-        >
-          <div class="flex-1">
-            <div class="font-medium text-sm text-slate-700">{{ c.name }}</div>
-            <div class="text-xs text-slate-500">฿{{ c.price }} x {{ c.qty }}</div>
+      <!-- Cart Items List -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
+        <TransitionGroup name="list">
+          <div 
+            v-for="c in cart" 
+            :key="c.id" 
+            class="group bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-3 relative overflow-hidden"
+          >
+            <!-- Item Details -->
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-slate-700 truncate">{{ c.name }}</div>
+              <div class="text-xs text-slate-400 mt-0.5">฿{{ c.price }} / ชิ้น</div>
+            </div>
+            
+            <!-- Qty Controls -->
+            <div class="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-200">
+              <button @click="dec(c)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-white rounded-md transition-colors font-bold text-lg leading-none">−</button>
+              <span class="w-8 text-center text-sm font-bold text-slate-700">{{ c.qty }}</span>
+              <button @click="inc(c)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-white rounded-md transition-colors font-bold text-lg leading-none">+</button>
+            </div>
+            
+            <!-- Total Price -->
+            <div class="text-right min-w-[80px]">
+              <div class="font-bold text-slate-800">฿{{ (c.price * c.qty).toLocaleString() }}</div>
+            </div>
+            
+            <!-- Delete Button -->
+            <button @click="remove(c)" class="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </div>
-          
-          <div class="flex items-center gap-1 bg-white rounded-md border border-slate-200">
-            <button @click="dec(c)" class="w-7 h-7 font-bold text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-l-md">-</button>
-            <span class="w-8 text-center text-sm font-semibold">{{ c.qty }}</span>
-            <button @click="inc(c)" class="w-7 h-7 font-bold text-slate-500 hover:bg-green-50 hover:text-green-600 rounded-r-md">+</button>
-          </div>
-          
-          <div class="text-right w-20">
-            <div class="font-bold text-slate-800">฿{{ c.price * c.qty }}</div>
-          </div>
-          
-          <button @click="remove(c)" class="text-slate-300 hover:text-red-500 transition p-1">
-            🗑️
-          </button>
+        </TransitionGroup>
+        
+        <div v-if="!cart.length" class="flex flex-col items-center justify-center h-48 text-slate-300 border-2 border-dashed border-slate-200 rounded-2xl">
+          <span class="text-4xl mb-2">🛒</span>
+          <span class="text-sm">ยังไม่มีสินค้า</span>
         </div>
       </div>
 
       <!-- Payment Section -->
-      <div class="p-4 bg-white border-t border-slate-200 space-y-3">
+      <div class="bg-white p-5 rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)] space-y-4 z-10">
         
-        <!-- Summary -->
-        <div class="space-y-1 text-sm text-slate-600 mb-3">
-          <div class="flex justify-between">
-            <span>รวมสินค้า</span>
-            <span>{{ cart.reduce((s, i) => s + i.qty, 0) }} ชิ้น</span>
-          </div>
-          <div v-if="orderPoints" class="flex justify-between text-green-600">
-            <span>🎁 ได้รับแต้ม</span>
+        <!-- Summary Mini -->
+        <div class="flex justify-between text-sm text-slate-500">
+          <span>{{ cart.reduce((s, i) => s + i.qty, 0) }} รายการ</span>
+          <span v-if="orderPoints > 0" class="text-emerald-600 font-medium flex items-center gap-1">
+            <span>🎁 ได้แต้ม</span>
             <span>+{{ orderPoints }}</span>
+          </span>
+        </div>
+
+        <div class="border-t border-dashed border-slate-200 my-2"></div>
+
+        <!-- Total & Payment Method -->
+        <div class="flex justify-between items-end mb-4">
+          <div class="flex flex-col">
+            <span class="text-sm font-semibold text-slate-500">ยอดสุทธิ</span>
+            <span class="text-xs text-slate-400">Total Amount</span>
+          </div>
+          <div class="text-3xl font-bold text-indigo-600">
+            ฿{{ (receiptFinal || finalTotal).toLocaleString() }}
           </div>
         </div>
-        <div v-if="usePoints > 0" class="flex justify-between text-red-500">
-        <span>ใช้แต้ม</span>
-        <span>-{{ usePoints }}</span>
-      </div>
 
-        <div class="flex justify-between items-center text-xl font-bold text-slate-800 mb-2">
-          <span>ยอดรวมสุทธิ</span>
-          <span class="text-indigo-600">฿{{ receiptFinal || finalTotal }}</span>
-        </div>
-
-        <!-- Payment Method Selection -->
-        <div class="flex gap-2 mb-3">
+        <!-- Payment Tabs -->
+        <div class="grid grid-cols-2 gap-3 mb-4">
           <button 
             @click="paymentMethod = 'cash'"
-            :class="['flex-1 p-2 border-2 rounded-lg font-medium text-sm transition', paymentMethod === 'cash' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500']"
+            :class="['flex items-center justify-center gap-2 p-3 rounded-xl border-2 font-bold text-sm transition-all', paymentMethod === 'cash' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-400 hover:bg-slate-50 hover:border-slate-200']"
           >
-            💵 เงินสด
+            <span>💵</span> เงินสด
           </button>
           <button 
             @click="paymentMethod = 'qr'"
-            :class="['flex-1 p-2 border-2 rounded-lg font-medium text-sm transition', paymentMethod === 'qr' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500']"
+            :class="['flex items-center justify-center gap-2 p-3 rounded-xl border-2 font-bold text-sm transition-all', paymentMethod === 'qr' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-400 hover:bg-slate-50 hover:border-slate-200']"
           >
-            📱 พร้อมเพย์/QR
+            <span>📱</span> พร้อมเพย์
           </button>
         </div>
 
-        <div v-if="customerName" class="bg-yellow-50 p-3 rounded-lg space-y-2">
-
-          <div class="text-sm text-gray-600">
-            ใช้แต้มได้สูงสุด {{ maxUsablePoints }} แต้ม
+        <!-- Points Redemption -->
+        <div v-if="customerName" class="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2 mb-4">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-amber-800 uppercase tracking-wide">ใช้แต้มสะสม</span>
+            <span class="text-xs text-amber-600">มี {{ maxUsablePoints }} แต้ม</span>
           </div>
-
-          <input
-            v-model.number="usePoints"
-            type="number"
-            class="w-full p-2 border rounded text-right"
-            placeholder="ใช้แต้ม..."
-          />
-
-          <div class="flex justify-between text-sm text-green-600">
-            <span>ส่วนลด</span>
-            <span>-฿{{ discount }}</span>
+          <div class="flex gap-2">
+            <input
+              v-model.number="usePoints"
+              type="number"
+              class="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-right font-bold text-amber-900 outline-none focus:ring-2 focus:ring-amber-300"
+              placeholder="0"
+            />
+            <div class="flex flex-col justify-center px-2">
+              <span class="text-xs text-rose-500 font-bold">ลด ฿{{ discount }}</span>
+            </div>
           </div>
-
         </div>
-        <!-- Cash Input -->
-        <div v-if="paymentMethod === 'cash'" class="space-y-2">
-          <input 
-            v-model.number="cashReceived" 
-            type="number" 
-            class="w-full p-3 border-2 border-slate-200 rounded-lg text-lg font-bold focus:border-indigo-500 outline-none text-right" 
-            placeholder="รับเงินมา..."
-          />
-          <div class="grid grid-cols-4 gap-1">
-             <button @click="cashReceived = finalTotal" class="bg-slate-100 p-1 rounded text-xs font-bold hover:bg-slate-200">=ยอด</button>
-             <button @click="cashReceived += 20" class="bg-slate-100 p-1 rounded text-xs font-bold hover:bg-slate-200">+20</button>
-             <button @click="cashReceived += 100" class="bg-slate-100 p-1 rounded text-xs font-bold hover:bg-slate-200">+100</button>
-             <button @click="cashReceived += 500" class="bg-slate-100 p-1 rounded text-xs font-bold hover:bg-slate-200">+500</button>
+
+        <!-- Cash Input Area -->
+        <div v-if="paymentMethod === 'cash'" class="space-y-3">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-4 flex items-center text-slate-400">฿</div>
+            <input 
+              v-model.number="cashReceived" 
+              type="number" 
+              class="w-full pl-8 pr-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-3xl font-bold text-slate-800 focus:border-indigo-500 focus:bg-white outline-none transition-all text-right placeholder:text-slate-200" 
+              placeholder="รับเงิน..."
+            />
           </div>
           
-          <div v-if="change > 0" class="p-3 bg-amber-50 border border-amber-100 rounded-lg text-center">
-            <div class="text-xs text-amber-600">เงินทอน</div>
-            <div class="text-2xl font-bold text-amber-700">฿{{ change }}</div>
+          <!-- Quick Cash Buttons -->
+          <div class="grid grid-cols-4 gap-2">
+             <button @click="cashReceived = finalTotal" class="py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 active:scale-95 transition">ยอด</button>
+             <button @click="cashReceived += 20" class="py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 active:scale-95 transition">+20</button>
+             <button @click="cashReceived += 100" class="py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 active:scale-95 transition">+100</button>
+             <button @click="cashReceived += 500" class="py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 active:scale-95 transition">+500</button>
+          </div>
+          
+          <div v-if="change > 0" class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex justify-between items-center animate-pulse-once">
+            <span class="text-sm font-bold text-emerald-700">เงินทอน</span>
+            <span class="text-2xl font-black text-emerald-600">฿{{ change.toLocaleString() }}</span>
           </div>
         </div>
 
-        <!-- Actions -->
+        <!-- Main Action Button -->
         <button 
           @click="checkout" 
           :disabled="cart.length === 0"
           :class="[
-            'w-full p-4 rounded-xl text-xl font-bold shadow-lg transition-all',
+            'w-full py-4 rounded-2xl text-xl font-bold shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2',
             cart.length > 0 
-              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-xl active:scale-[0.99]' 
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              ? 'bg-slate-800 text-white hover:bg-slate-900 shadow-slate-800/30' 
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
           ]"
         >
-          💳 คิดเงิน
+          <span>💳</span>
+          <span>คิดเงิน</span>
         </button>
 
-        <button @click="mockPaid" class="w-full p-2 text-xs text-slate-400 hover:text-slate-600 border border-dashed border-slate-200 rounded-lg">
-          🧪 ทดสอบจ่ายเงิน (Mock)
-        </button>
-      </div>
-    </div>
-
-    <!-- QR Modal (Original) -->
-    <div v-if="showQR" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-white p-6 rounded-2xl shadow-2xl text-center max-w-sm w-full mx-4 relative">
-        <button @click="showQR = false" class="absolute top-2 right-2 text-slate-400 hover:text-slate-800 text-2xl">&times;</button>
-        
-        <h3 class="text-xl font-bold text-slate-700 mb-2">สแกนเพื่อชำระเงิน</h3>
-        <div class="text-3xl font-bold text-indigo-600 mb-4">฿{{ finalTotal }}</div>
-        
-        <div class="bg-white p-4 rounded-lg border border-slate-100 inline-block mb-4">
-          <img v-if="qrCode" :src="qrCode" class="w-48 h-48 mx-auto" alt="QR Code" />
-          <div v-else class="w-48 h-48 bg-slate-100 flex items-center justify-center text-slate-400">
-            กำลังโหลด QR...
-          </div>
-        </div>
-        
-        <div class="text-sm text-slate-500">รอการชำระเงิน...</div>
-        <button @click="mockPaid" class="mt-4 bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600">
-          ยืนยันการชำระเงินแล้ว (Test)
+        <!-- Mock Button (Hidden visual style) -->
+        <button @click="mockPaid" class="w-full text-[10px] text-slate-300 hover:text-slate-400 py-1 underline decoration-dashed">
+          Test: Mock Payment
         </button>
       </div>
     </div>
 
-    <!-- ==================== DIGITAL RECEIPT MODAL (NEW) ==================== -->
+    <!-- QR Modal -->
     <Transition name="fade">
-      <div v-if="showReceiptModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="resetPOS">
-        
-        <!-- Receipt Paper Container -->
-        <div class="bg-white w-full max-w-sm rounded-lg shadow-2xl overflow-hidden relative animate-pop-in">
+      <div v-if="showQR" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm w-full relative overflow-hidden border border-white/20">
+          <button @click="showQR = false" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-rose-100 hover:text-rose-500 transition">✕</button>
           
-          <!-- Close Button (X) -->
-          <button @click="resetPOS" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-2xl z-10">
-            &times;
+          <div class="mb-6">
+            <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">📱</div>
+            <h3 class="text-xl font-bold text-slate-800">แสกน QR Code</h3>
+            <p class="text-sm text-slate-500">พร้อมเพย์ (PromptPay)</p>
+          </div>
+          
+          <div class="p-4 bg-white rounded-2xl shadow-inner border border-slate-100 mb-6">
+            <img v-if="qrCode" :src="qrCode" class="w-full aspect-square object-contain mix-blend-multiply" alt="QR Code" />
+            <div v-else class="w-full aspect-square flex items-center justify-center">
+              <div class="animate-spin text-indigo-500">⟳</div>
+            </div>
+          </div>
+          
+          <div class="text-2xl font-black text-slate-800 mb-6">฿{{ finalTotal.toLocaleString() }}</div>
+          
+          <button @click="mockPaid" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition-colors">
+            ยืนยันการชำระเงิน (Test)
           </button>
-
-          <!-- Receipt Content -->
-          <div class="p-6 text-center border-b border-dashed border-gray-300 bg-gray-50">
-            <div class="text-3xl mb-1">✅</div>
-            <h1 class="text-xl font-bold text-gray-800">ชำระเงินสำเร็จ</h1>
-            <div class="text-sm text-gray-500 mt-1">{{ new Date().toLocaleString('th-TH') }}</div>
-          </div>
-
-          <div class="p-6 space-y-4 text-sm text-left">
-            <!-- Shop Info -->
-            <div class="text-center border-b border-dashed pb-4">
-              <h2 class="font-bold text-lg">☕ Coffee Shop POS</h2>
-              <div class="text-xs text-gray-500">สาขาหลัก | Tel: 08x-xxx-xxxx</div>
-              <div class="text-xs text-gray-400 mt-1">บิลเลขที่: {{ orderId }}</div>
-            </div>
-
-            <!-- Items List -->
-            <div class="space-y-2 border-b border-dashed pb-4">
-              <div class="flex justify-between text-xs text-gray-500 mb-2">
-                <span class="w-1/2">รายการ</span>
-                <span class="w-1/4 text-center">จำนวน</span>
-                <span class="w-1/4 text-right">ราคา</span>
-              </div>
-              <div v-for="item in cart" :key="item.id" class="flex justify-between items-center">
-                <span class="w-1/2 font-medium truncate">{{ item.name }}</span>
-                <span class="w-1/4 text-center text-gray-600">{{ item.qty }}</span>
-                <span class="w-1/4 text-right font-semibold">฿{{ item.price * item.qty }}</span>
-              </div>
-            </div>
-
-            <!-- Summary -->
-            <div class="space-y-1">
-
-              <!-- 🔹 ยอดก่อนลด -->
-<div class="flex justify-between text-gray-600">
-  <span>ยอดก่อนลด</span>
-  <span>{{ receiptTotal || total }} บาท</span>
-</div>
-
-<div v-if="receiptUsePoints > 0" class="flex justify-between text-red-500">
-  <span>ใช้แต้ม ({{ receiptUsePoints }} แต้ม)</span>
-  <span>-{{ receiptDiscount }} บาท</span>
-</div>
-
-<div class="flex justify-between font-bold text-base">
-  <span>ยอดสุทธิ</span>
-  <span>{{ receiptFinal || finalTotal }} บาท</span>
-</div>
-
-              <!-- 🔹 เงินสด -->
-            <div class="flex justify-between">
-                <span>วิธีชำระเงิน</span>
-                <span>
-                  {{ paymentMethod === 'cash' ? 'เงินสด' : 'QR / โอนเงิน' }}
-                </span>
-              </div>
-
-              <!-- 🔹 เงินทอน -->
-              <div v-if="paymentMethod === 'cash' && change > 0"
-                  class="flex justify-between text-green-600 font-semibold">
-                <span>ทอนเงิน</span>
-                <span>฿{{ change }}</span>
-              </div>
-
-              <!-- 🔹 QR -->
-              <!-- <div v-if="paymentMethod === 'qr'"
-                  class="flex justify-between text-indigo-600 font-semibold">
-                <span>ชำระโดย</span>
-                <span>โอนเงิน/QR</span>
-              </div> -->
-
-            </div>
-        <!-- MEMBER -->
-        <div v-if="customerName" class="text-sm mt-2">
-          👤 {{ customerName }}
         </div>
+      </div>
+    </Transition>
 
-        <!-- แต้มรวม -->
-        <div v-if="customerName" class="text-sm text-blue-600">
-          ⭐ แต้มรวม {{ customerTotalPoints }}
-        </div>
-            <!-- Points -->
-          <div v-if="customerName && orderPoints > 0"
-            class="bg-indigo-50 p-3 rounded-lg text-indigo-700 flex justify-between items-center">
-            <span>🎁 ได้รับแต้มสะสม</span>
-            <span class="font-bold">+{{ orderPoints }} Points</span>
-          </div>
-          </div>
-          <div v-if="customerName" class="bg-green-50 p-3 rounded-lg space-y-1">
-            <div class="flex justify-between text-green-700">
-              <span>👤 สมาชิก</span>
-              <span class="font-semibold">{{ customerName }}</span>
+    <!-- ==================== DIGITAL RECEIPT MODAL ==================== -->
+    <Transition name="slide-up">
+      <div v-if="showReceiptModal" class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="resetPOS">
+        
+        <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden relative animate-pop-in font-sans">
+          
+          <!-- Header Receipt Look -->
+          <div class="bg-slate-800 p-6 pb-8 rounded-b-[40px] text-center relative">
+            <div class="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white text-2xl mx-auto mb-3 shadow-lg shadow-emerald-500/30">
+              ✓
             </div>
-
-            <div class="flex justify-between text-blue-600">
-              <span>⭐ แต้มสะสม</span>
-              <span class="font-bold">{{ customerTotalPoints }}</span>
-            </div>
-
+            <h1 class="text-xl font-bold text-white">ชำระเงินสำเร็จ</h1>
+            <p class="text-slate-400 text-xs mt-1">{{ new Date().toLocaleString('th-TH') }}</p>
           </div>
+
+          <!-- Receipt Body -->
+          <div class="px-6 -mt-6">
+            <div class="bg-white border border-slate-100 rounded-2xl shadow-lg p-6 space-y-4">
+              
+              <!-- Shop Info -->
+              <div class="text-center border-b border-dashed border-slate-200 pb-4">
+                <h2 class="font-bold text-slate-800">{{config.nameshop}}</h2>
+                <div class="text-xs text-slate-400 mt-1">Order #{{ orderId }}</div>
+              </div>
+
+              <!-- Items -->
+              <div class="space-y-3 border-b border-dashed border-slate-200 pb-4">
+                <div v-for="item in cart" :key="item.id" class="flex justify-between items-start text-sm">
+                  <div class="flex-1 pr-2">
+                    <div class="font-medium text-slate-700 truncate">{{ item.name }}</div>
+                    <div class="text-xs text-slate-400">{{ item.qty }} x {{ item.price }}</div>
+                  </div>
+                  <div class="font-bold text-slate-700">฿{{ (item.price * item.qty).toLocaleString() }}</div>
+                </div>
+              </div>
+
+              <!-- Financial Summary -->
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between text-slate-500">
+                  <span>ยอดรวม</span>
+                  <span>฿{{ (receiptTotal || total).toLocaleString() }}</span>
+                </div>
+                <div v-if="receiptUsePoints > 0" class="flex justify-between text-rose-500">
+                  <span>ใช้แต้ม ({{ receiptUsePoints }})</span>
+                  <span>-฿{{ receiptDiscount }}</span>
+                </div>
+                <div class="flex justify-between font-bold text-lg text-slate-800 pt-2 border-t border-slate-100">
+                  <span>ยอดสุทธิ</span>
+                  <span>฿{{ (receiptFinal || finalTotal).toLocaleString() }}</span>
+                </div>
+                
+                <div class="flex justify-between text-slate-400 text-xs mt-2 bg-slate-50 p-2 rounded-lg">
+                  <span>{{ paymentMethod === 'cash' ? '💵 เงินสด' : '📱 โอนเงิน' }}</span>
+                  <span v-if="paymentMethod === 'cash' && change > 0" class="text-emerald-600">ทอน ฿{{ change }}</span>
+                </div>
+              </div>
+
+              <!-- Member Info (Cleaned up) -->
+              <div v-if="customerName" class="bg-indigo-50 p-3 rounded-xl flex justify-between items-center">
+                <div>
+                  <div class="text-xs font-bold text-indigo-500">สมาชิก: {{ customerName }}</div>
+                  <div class="text-xs text-indigo-400">แต้มคงเหลือ: {{ customerTotalPoints }}</div>
+                </div>
+                <div v-if="orderPoints > 0" class="text-xs font-bold text-emerald-600 bg-white px-2 py-1 rounded-lg shadow-sm">
+                  +{{ orderPoints }} แต้ม
+                </div>
+              </div>
+
+            </div>
+          </div>
+
           <!-- Footer Actions -->
-          <div class="p-4 bg-gray-50 space-y-2">
+          <div class="p-6">
             <button @click="resetPOS"
-              class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition active:scale-95">
-              เสร็จสิ้น (เริ่มออเดอร์ใหม่)
+              class="w-full py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-800/20 transition-all active:scale-95 flex items-center justify-center gap-2">
+              <span>🏁</span>
+              <span>เสร็จสิ้น / ออเดอร์ใหม่</span>
             </button>
           </div>
         </div>
@@ -707,31 +768,47 @@ onUnmounted(() => {
 </template>
 
 <style>
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* Hide Scrollbar but allow scroll */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
 }
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
-/* Animation for Modal */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+/* Animations */
+.toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
+
+.list-enter-active, .list-leave-active { transition: all 0.3s ease; }
+.list-enter-from, .list-leave-to { opacity: 0; transform: translateX(20px); }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
+.slide-up-enter-active, .slide-up-leave-active { transition: all 0.3s ease; }
+.slide-up-enter-from, .slide-up-leave-to { opacity: 0; transform: translateY(50px) scale(0.95); }
+
+.slide-down-enter-active { transition: all 0.3s ease; }
+.slide-down-enter-from { opacity: 0; transform: translateY(-10px); }
+
 .animate-pop-in {
-  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes pop-in {
   0% { transform: scale(0.9); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-pulse-once {
+  animation: pulse-green 0.5s ease-in-out;
+}
+
+@keyframes pulse-green {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); background-color: #ecfdf5; }
+  100% { transform: scale(1); }
 }
 </style>
