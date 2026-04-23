@@ -207,7 +207,7 @@ const checkout = async () => {
         customerName: customerName.value,
         customerPhone: customerPhone.value,
         usePoints: usePoints.value,
-        total: finalTotal.value,
+        // total: finalTotal.value,
         paymentMethod: paymentMethod.value // 🔥 เพิ่ม
       }
     })

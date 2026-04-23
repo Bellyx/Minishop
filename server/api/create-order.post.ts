@@ -7,29 +7,32 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const usePoints = Number(body.usePoints || 0)
 
-  const conn = await db.getConnection()
- if (!body || !Array.isArray(body.items) || body.items.length === 0) {
+  if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     throw createError({
-        statusCode: 400,
-        message: 'ไม่มีสินค้าในตะกร้า'
+      statusCode: 400,
+      message: 'ไม่มีสินค้าในตะกร้า'
     })
-    }
+  }
+
+  const conn = await db.getConnection()
+
   try {
     await conn.beginTransaction()
 
-    // =========================
-    // CONFIG
-    // =========================
+    /* =========================
+       CONFIG
+    ========================= */
     const [cfgRows]: any = await conn.query(`
-    SELECT * FROM settings 
-    WHERE \`key\` IN ('point_value','max_point_percent')
+      SELECT * FROM settings 
+      WHERE \`key\` IN ('point_value','max_point_percent','promptpay_id')
     `)
 
     const cfg: any = {}
-    cfgRows.forEach(r => cfg[r.key] = Number(r.value))
+    cfgRows.forEach(r => cfg[r.key] = r.value)
 
-    const pointValue = cfg.point_value || 1
-    const maxPercent = cfg.max_point_percent || 5000
+    const pointValue = Number(cfg.point_value || 1)
+    const maxPercent = Number(cfg.max_point_percent || 50) // 🔥 default 50%
+    const promptpayId = String(cfg.promptpay_id || '')
 
     /* =========================
        1. คำนวณยอดจริง
@@ -51,13 +54,12 @@ export default defineEventHandler(async (event) => {
 
       productMap[item.id] = p
 
-      total += p.price * item.qty
-
+      total += Number(p.price) * Number(item.qty)
       totalPoints += calcPoints(p) * item.qty
     }
 
     /* =========================
-       2. ตรวจแต้มลูกค้า
+       2. ดึงแต้มลูกค้า
     ========================= */
     let customerPoints = 0
 
@@ -67,12 +69,14 @@ export default defineEventHandler(async (event) => {
         [body.customerPhone]
       )
 
-      customerPoints = rows?.[0]?.points || 0
+      customerPoints = Number(rows?.[0]?.points || 0)
     }
 
     /* =========================
        3. VALIDATE แต้ม (กันโกง)
     ========================= */
+    let discount = 0
+
     if (usePoints > 0) {
       if (!body.customerPhone) {
         throw createError({ message: 'ไม่มีสมาชิก' })
@@ -82,29 +86,31 @@ export default defineEventHandler(async (event) => {
         throw createError({ message: 'แต้มไม่พอ' })
       }
 
+      // 🔥 จำกัด % การใช้แต้ม
       const maxDiscount = (total * maxPercent) / 100
       const maxPoints = Math.floor(maxDiscount / pointValue)
 
       if (usePoints > maxPoints) {
         throw createError({ message: 'ใช้แต้มเกินที่กำหนด' })
       }
+
+      discount = usePoints * pointValue
     }
 
     /* =========================
-       4. คำนวณราคาสุทธิ
+       4. ราคาสุทธิ
     ========================= */
-    const discount = usePoints * pointValue
     const finalTotal = Math.max(0, total - discount)
 
     /* =========================
-       5. สร้าง ORDER
+       5. CREATE ORDER
     ========================= */
     const [orderResult]: any = await conn.query(`
       INSERT INTO orders
       (amount, status, customer_name, customer_phone, points, payment_method, use_points)
       VALUES (?, 'pending', ?, ?, ?, ?, ?)
     `, [
-      finalTotal,
+      finalTotal, // 🔥 ใช้ราคาหลังหักแต้ม
       body.customerName || null,
       body.customerPhone || null,
       totalPoints,
@@ -115,7 +121,7 @@ export default defineEventHandler(async (event) => {
     const orderId = orderResult.insertId
 
     /* =========================
-       6. insert items
+       6. ITEMS
     ========================= */
     for (const item of body.items) {
       const p = productMap[item.id]
@@ -129,13 +135,17 @@ export default defineEventHandler(async (event) => {
     await conn.commit()
 
     /* =========================
-       7. QR
+       7. QR (🔥 ใช้ finalTotal เท่านั้น)
     ========================= */
-    const payload = generatePayload(String(cfg.promptpay_id || ''), {
-      amount: finalTotal
-    })
+    let qr = null
 
-    const qr = await QRCode.toDataURL(payload)
+    if (promptpayId && finalTotal > 0) {
+      const payload = generatePayload(promptpayId, {
+        amount: finalTotal
+      })
+
+      qr = await QRCode.toDataURL(payload)
+    }
 
     return {
       order_id: orderId,
@@ -147,7 +157,12 @@ export default defineEventHandler(async (event) => {
 
   } catch (err: any) {
     await conn.rollback()
-    throw createError({ message: err.message })
+    console.error('CREATE ORDER ERROR:', err)
+
+    throw createError({
+      statusCode: 500,
+      message: err.message || 'create order fail'
+    })
   } finally {
     conn.release()
   }
