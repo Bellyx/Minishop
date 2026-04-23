@@ -23,19 +23,29 @@ const memberError = ref('')
 /* PAYMENT */
 const paymentMethod = ref('cash')
 const cashReceived = ref(0)
-
+const receiptTotal = ref(0)
+const receiptDiscount = ref(0)
+const receiptUsePoints = ref(0)
+const receiptFinal = ref(0)
 /* USEPOINT */
 const usePoints = ref(0)
 const discount = ref(0)
 
 const maxUsablePoints = computed(() => {
   const percent = Number(config.value.max_point_percent || 50)
+  const pointValue = Number(config.value.point_value || 1)
 
-  const maxByPercent = Math.floor((total.value * percent) / 100)
+  if (!pointValue) return 0
+
+  // 💰 จำกัดเป็น "บาท"
+  const maxDiscount = (total.value * percent) / 100
+
+  // 🎯 แปลงเป็น "แต้ม"
+  const maxPointsByPercent = Math.floor(maxDiscount / pointValue)
 
   return Math.min(
-    customerTotalPoints.value,
-    maxByPercent
+    customerTotalPoints.value || 0,
+    maxPointsByPercent
   )
 })
 
@@ -207,8 +217,7 @@ const checkout = async () => {
         customerName: customerName.value,
         customerPhone: customerPhone.value,
         usePoints: usePoints.value,
-        // total: finalTotal.value,
-        paymentMethod: paymentMethod.value // 🔥 เพิ่ม
+        paymentMethod: paymentMethod.value
       }
     })
 
@@ -216,6 +225,11 @@ const checkout = async () => {
     qrCode.value = res.qr_code
     orderPoints.value = res.points || 0
     customerTotalPoints.value = res.total_points || 0
+    // 🔥 ใช้ค่าจาก backend เท่านั้น (กันโกง + ตรง 100%)
+    receiptTotal.value = res.total
+    receiptDiscount.value = res.discount
+    receiptUsePoints.value = res.use_points
+    receiptFinal.value = res.amount
 
     if (paymentMethod.value === 'cash') {
       await payCash()
@@ -249,6 +263,7 @@ const payCash = async () => {
     const changeVal = change.value
     speak(`รับเงินแล้ว ทอน ${changeVal} บาท`)
     
+    
     // 🔥 เปลี่ยนจาก printReceipt() เป็นการแสดง Modal
     showReceiptModal.value = true
 
@@ -268,7 +283,7 @@ const mockPaid = async () => {
     method: 'POST'
   })
 
-  speak(`ชำระเงินแล้ว ${total.value} บาท`)
+  speak(`ชำระเงินแล้ว ${finalTotal.value} บาท`)
   
   // ปิด QR Modal ก่อน (ถ้าเปิดอยู่)
   showQR.value = false
@@ -461,7 +476,7 @@ onUnmounted(() => {
 
         <div class="flex justify-between items-center text-xl font-bold text-slate-800 mb-2">
           <span>ยอดรวมสุทธิ</span>
-          <span class="text-indigo-600">฿{{ total }}</span>
+          <span class="text-indigo-600">฿{{ receiptFinal || finalTotal }}</span>
         </div>
 
         <!-- Payment Method Selection -->
@@ -546,7 +561,7 @@ onUnmounted(() => {
         <button @click="showQR = false" class="absolute top-2 right-2 text-slate-400 hover:text-slate-800 text-2xl">&times;</button>
         
         <h3 class="text-xl font-bold text-slate-700 mb-2">สแกนเพื่อชำระเงิน</h3>
-        <div class="text-3xl font-bold text-indigo-600 mb-4">฿{{ total }}</div>
+        <div class="text-3xl font-bold text-indigo-600 mb-4">฿{{ finalTotal }}</div>
         
         <div class="bg-white p-4 rounded-lg border border-slate-100 inline-block mb-4">
           <img v-if="qrCode" :src="qrCode" class="w-48 h-48 mx-auto" alt="QR Code" />
@@ -607,22 +622,20 @@ onUnmounted(() => {
             <div class="space-y-1">
 
               <!-- 🔹 ยอดก่อนลด -->
-              <div class="flex justify-between text-gray-600">
-                <span>ยอดก่อนลด</span>
-                <span>฿{{ total }}</span>
-              </div>
+<div class="flex justify-between text-gray-600">
+  <span>ยอดก่อนลด</span>
+  <span>{{ receiptTotal || total }} บาท</span>
+</div>
 
-              <!-- 🔹 ใช้แต้ม -->
-              <div v-if="usePoints > 0" class="flex justify-between text-red-500">
-                <span>คุณประหยัดไป</span>
-                <span>-฿{{ usePoints }} บาท</span>
-              </div>
+<div v-if="receiptUsePoints > 0" class="flex justify-between text-red-500">
+  <span>ใช้แต้ม ({{ receiptUsePoints }} แต้ม)</span>
+  <span>-{{ receiptDiscount }} บาท</span>
+</div>
 
-              <!-- 🔹 ยอดสุทธิ -->
-              <div class="flex justify-between font-bold text-base">
-                <span>ยอดสุทธิ</span>
-                <span>฿{{ finalTotal }}</span>
-              </div>
+<div class="flex justify-between font-bold text-base">
+  <span>ยอดสุทธิ</span>
+  <span>{{ receiptFinal || finalTotal }} บาท</span>
+</div>
 
               <!-- 🔹 เงินสด -->
             <div class="flex justify-between">
