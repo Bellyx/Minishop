@@ -34,6 +34,13 @@ export default defineEventHandler(async () => {
     LIMIT 10
   `)
 
+      // 🔥 แยก payment
+    const [paymentStats]: any = await db.query(`
+      SELECT payment_method, SUM(amount) as total
+      FROM orders
+      GROUP BY payment_method
+    `)
+
   /* ================= BUY FREQUENCY ================= */
   const [frequentCustomers]: any = await db.query(`
     SELECT 
@@ -87,6 +94,7 @@ export default defineEventHandler(async () => {
     topCustomers,
     frequentCustomers,
     bestSeller,
-    latestOrders
+    latestOrders,
+    paymentStats
   }
 })

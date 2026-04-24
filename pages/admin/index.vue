@@ -60,6 +60,16 @@ const formatDate = (date) => {
     minute: '2-digit'
   })
 }
+
+const lowStock = ref([])
+
+const loadLowStock = async () => {
+  lowStock.value = await $fetch('/api/admin/products/low-stock')
+}
+
+onMounted(() => {
+  loadLowStock()
+})
 /* =========================
    LIFECYCLE
 ========================= */
@@ -80,7 +90,38 @@ onUnmounted(() => {
     <h1 class="text-2xl font-bold">
       📊 Admin Dashboard
     </h1>
+    <div v-if="lowStock.length"
+  class="bg-red-50 border border-red-200 rounded-xl p-4 shadow">
 
+  <div class="flex justify-between items-center mb-2">
+    <h2 class="font-bold text-red-600">
+      ⚠️ สินค้าใกล้หมด ({{ lowStock.length }})
+    </h2>
+
+    <button @click="loadLowStock"
+      class="text-xs text-gray-500 hover:text-black">
+      รีเฟรช
+    </button>
+  </div>
+
+  <div class="space-y-2 max-h-40 overflow-auto">
+    <div v-for="p in lowStock" :key="p.id"
+      class="flex justify-between bg-white p-2 rounded border">
+
+      <span>{{ p.name }}</span>
+
+      <span 
+        :class="[
+          'font-bold',
+          p.stock === 0 ? 'text-red-600' : 'text-orange-500'
+        ]"
+      >
+        {{ p.stock }} ชิ้น
+      </span>
+
+    </div>
+  </div>
+</div>
     <!-- KPI -->
     <div class="grid grid-cols-3 gap-4">
 

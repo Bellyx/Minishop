@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     )
 
     /* =========================
-       3. ตัด stock
+       3. ตัด stock + log (🔥 FIX)
     ========================= */
     const [items]: any = await conn.query(
       'SELECT * FROM order_items WHERE order_id=?',
@@ -42,19 +42,42 @@ export default defineEventHandler(async (event) => {
     )
 
     for (const item of items) {
-      await conn.query(
-        'UPDATE products SET stock = stock - ? WHERE id=?',
-        [item.qty, item.product_id]
+
+      // 🔥 LOCK product row
+      const [pRows]: any = await conn.query(
+        'SELECT stock FROM products WHERE id=? FOR UPDATE',
+        [item.product_id]
       )
 
+      const before = Number(pRows?.[0]?.stock || 0)
+      const after = before - Number(item.qty)
+
+      if (after < 0) {
+        throw createError({ message: 'Stock ติดลบ' })
+      }
+
+      // update stock
+      await conn.query(
+        'UPDATE products SET stock=? WHERE id=?',
+        [after, item.product_id]
+      )
+
+      // 🔥 insert log แบบครบ
       await conn.query(`
-        INSERT INTO stock_logs (product_id, qty, type, order_id)
-        VALUES (?, ?, 'out', ?)
-      `, [item.product_id, item.qty, id])
+       INSERT INTO stock_logs 
+      (product_id, type, qty, before_qty, after_qty, note, order_id)
+      VALUES (?, 'out', ?, ?, ?, ?, ?)
+      `, [
+        item.product_id,
+        item.qty,
+        before,
+        after,
+        `ขาย order #${id}`
+      ])
     }
 
     /* =========================
-       4. ใช้แต้ม (กันติดลบ)
+       4. ใช้แต้ม
     ========================= */
     if (order.use_points && order.customer_phone) {
 

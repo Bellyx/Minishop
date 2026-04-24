@@ -146,10 +146,22 @@ const handleBarcode = () => {
 
 /* ================= CART ================= */
 const add = (p) => {
+  if (p.stock <= 0) {
+    alert('❌ สินค้าหมด')
+    return
+  }
+
   const f = cart.value.find(i => i.id === p.id)
-  if (f) f.qty++
-  else cart.value.push({ ...p, qty: 1 })
-  nextTick(() => searchRef.value?.focus())
+
+  if (f) {
+    if (f.qty >= p.stock) {
+      alert('❌ ของไม่พอ')
+      return
+    }
+    f.qty++
+  } else {
+    cart.value.push({ ...p, qty: 1 })
+  }
 }
 
 const inc = (i) => i.qty++
@@ -413,37 +425,77 @@ onUnmounted(() => {
       </div>
 
       <!-- Product Grid -->
-      <div class="flex-1 overflow-y-auto p-6 pt-2">
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-          <button
-            v-for="p in filteredProducts"
-            :key="p.id"
-            @click="add(p)"
-            class="group bg-white p-4 rounded-2xl border border-slate-100 hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-200 flex flex-col items-start justify-between h-40 relative overflow-hidden"
-          >
-            <!-- Product Icon Placeholder -->
-            <div class="absolute -right-4 -top-4 w-24 h-24 bg-slate-50 rounded-full group-hover:bg-indigo-50 transition-colors flex items-center justify-center text-4xl text-slate-300 group-hover:text-indigo-200">
-              📦
-            </div>
-            
-            <div class="relative z-10 w-full pr-4">
-              <h3 class="font-bold text-slate-700 text-left leading-tight line-clamp-2 group-hover:text-indigo-700 transition-colors">
-                {{ p.name }}
-              </h3>
-              <div class="text-xs text-slate-400 mt-1 font-mono">{{ p.barcode || '-' }}</div>
-            </div>
+<div class="flex-1 overflow-y-auto p-6 pt-2">
+  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
 
-            <div class="relative z-10 w-full flex justify-between items-end">
-              <div class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-sm font-bold">
-                ฿{{ Number(p.price).toLocaleString() }}
-              </div>
-              <div class="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white text-indigo-400 flex items-center justify-center text-xs transition-colors">
-                +
-              </div>
-            </div>
-          </button>
+    <button
+      v-for="p in filteredProducts"
+      :key="p.id"
+      @click="add(p)"
+      :disabled="p.stock === 0"
+      :class="[
+        'group relative overflow-hidden p-3 rounded-xl border transition-all text-left flex flex-col justify-between h-32',
+        p.stock === 0
+          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          : 'bg-white hover:border-indigo-400 hover:shadow-md active:scale-[0.98]'
+      ]"
+    >
+
+      <!-- 🔴 SOLD OUT Overlay -->
+      <div
+        v-if="p.stock === 0"
+        class="absolute inset-0 z-20 bg-black/60 flex items-center justify-center text-white font-bold text-sm rounded-xl"
+      >
+        ❌ SOLD OUT
+      </div>
+
+      <!-- 📦 Icon -->
+      <div class="absolute -right-4 -top-4 w-24 h-24 bg-slate-50 rounded-full 
+                  group-hover:bg-indigo-50 transition-colors flex items-center 
+                  justify-center text-4xl text-slate-300 group-hover:text-indigo-200">
+        📦
+      </div>
+
+      <!-- 📝 Name -->
+      <div class="relative z-10 w-full pr-4">
+        <h3 class="font-bold text-slate-700 leading-tight line-clamp-2 
+                   group-hover:text-indigo-700 transition-colors">
+          {{ p.name }}
+        </h3>
+
+        <div class="text-xs text-slate-400 mt-1 font-mono">
+          {{ p.barcode || '-' }}
         </div>
-        
+      </div>
+
+      <!-- 💰 Price + Add -->
+      <div class="relative z-10 w-full flex justify-between items-end mt-2">
+
+        <div class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg text-sm font-bold">
+          ฿{{ Number(p.price).toLocaleString() }}
+        </div>
+
+        <div
+          class="w-6 h-6 rounded-full bg-slate-100 
+                 group-hover:bg-indigo-600 group-hover:text-white 
+                 text-indigo-400 flex items-center justify-center text-xs transition-colors"
+        >
+          +
+        </div>
+
+      </div>
+
+      <!-- 🟠 LOW STOCK BADGE -->
+      <div
+        v-if="p.stock > 0 && p.stock <= p.min_stock"
+        class="absolute top-20 left-20 text-xs bg-orange-400 text-white px-2 py-0.5 rounded animate-pulse z-10"
+      >
+        ⚠️ ใกล้หมด
+      </div>
+
+    </button>
+
+  </div>
         <!-- Empty State -->
         <div v-if="filteredProducts.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-400 animate-pulse">
           <div class="text-6xl mb-4 opacity-50">🔎</div>
